@@ -1,0 +1,50 @@
+* HB-80R: Celestion Seventy 80 (8 ohm) + Monacor HT-30 keresztvalto
+* Kozelito hangszoro-modellek; a plot.py a .param sorokat felulirja.
+* Futtatas onmagaban: ngspice -b crossover.cir
+
+.param vamp=2.83
+* pad=0 -> kozvetlen; pad=1 -> kb. -3 dB L-pad (2,2 ohm soros / 18 ohm parhuzamos)
+.param pad=0
+.param rs={ternary_fcn(pad>0.5, 2.2, 1m)}
+.param rp={ternary_fcn(pad>0.5, 18, 1G)}
+* Tweeter polaritas: 1 = normal, -1 = forditott (csak a plot.py hasznalja)
+.param pol=1
+
+Vamp amp 0 AC {vamp}
+
+* ---- Celestion Seventy 80, 8 ohm (becsult parameterek) ----
+* Re, lengotekercs-induktivitas veszteseggel (semi-inductance kozelites),
+* motoros rezonancia kb. 90 Hz-en.
+Rew  amp w1 6.2
+Lew  w1  w2 0.9m
+Rlew w1  w2 40
+Resw w2  0  40
+Lcew w2  0  20m
+Cmew w2  0  156u
+
+* ---- Tweeter-ag: PTC -> 2. rendu felulatereszto -> pad -> HT-30 ----
+Rptc amp n1 0.25
+C1   n1  n2 2.7u
+L1   n2  n2l 0.39m
+RL1  n2l 0  0.3
+Rs   n2  n3 {rs}
+Rp   n3  0  {rp}
+Vts  n3  t0 0
+* HT-30 (becsult): Re 6,4 ohm, Le 0,05 mH, fs = 2 kHz rezonancia
+Ret  t0  t1 6.4
+Let  t1  t2 0.05m
+Rest t2  0  14
+Lcet t2  0  0.5m
+Cmet t2  0  12.7u
+
+.control
+set wr_singlescale
+set wr_vecnames
+ac dec 200 20 20k
+let ztot = v(amp)/(-i(Vamp))
+let vtw = v(n3)
+let itw = i(Vts)
+wrdata crossover_out.txt real(ztot) imag(ztot) real(vtw) imag(vtw) real(itw) imag(itw)
+quit
+.endc
+.end

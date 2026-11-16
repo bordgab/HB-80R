@@ -1,0 +1,101 @@
+* HB-80R akusztikus elofok: 2 x TL072
+* U1A buffer+gain -> U2A 80 Hz low-cut -> U2B presence -> U1B Baxandall -> hangero
+* A plot.py a .param sorokat felulirja. Futtatas: ngspice -b preamp.cir
+
+* Potmeter-allasok 0..1 kozott
+* gain: 0 = 0 dB, 1 = max (+21 dB)
+.param gain=0
+* lowcut: 1 = bekapcsolva, 0 = kiiktatva
+.param lowcut=1
+* pres: 0 = nincs emeles, 1 = max presence
+.param pres=0
+* bass, treb: 0 = max vagas, 0.5 = kozep (lineraris), 1 = max emeles
+.param bass=0.5
+.param treb=0.5
+* vol: 0..1 (a log potmetert a plot.py kezeli, itt az arany)
+.param vol=1
+* bemeneti ellenallas: 1M aktiv, 4.7M passziv piezo
+.param rbias=1Meg
+
+.param rgain={47k*gain+10}
+.param rpres={22k*pres+10}
+.param rb1={100k*(1-bass)+10}
+.param rb2={100k*bass+10}
+.param rt1={100k*(1-treb)+10}
+.param rt2={100k*treb+10}
+.param rv1={10k*(1-vol)+1}
+.param rv2={10k*vol+1}
+.param rlc1={ternary_fcn(lowcut>0.5, 1m, 1G)}
+.param rlc2={ternary_fcn(lowcut>0.5, 1G, 1m)}
+
+* TL072 egyszerusitett AC makromodell: 200k nyilthurku erosites, GBW kb. 3 MHz
+.subckt opamp inp inn out
+Rin inp inn 1T
+E1  a 0 inp inn 200k
+R1  a b 1k
+C1  b 0 10.6u
+E2  out 0 b 0 1
+.ends
+
+Vin in 0 AC 1
+
+* ---- U1A: neminvertalo buffer, erosites 1..11 ----
+R1   in  a1  1k
+C1   a1  ip1 47n
+Rbi  ip1 0   {rbias}
+Crf  ip1 0   100p
+XU1A ip1 in1 o1 opamp
+Rf   o1  in1 {rgain}
+Cf   o1  in1 100p
+Rg   in1 g1  4.7k
+Cg   g1  0   22u
+
+* ---- U2A: 80 Hz masodrendu Sallen-Key felulatereszto (low-cut) ----
+C3   o1  s1  100n
+C4   s1  ip2 100n
+R5   s1  o2  15k
+R6   ip2 0   27k
+XU2A ip2 o2 o2 opamp
+* S1 kapcsolo: low-cut be/ki
+Rsw1 o2  x   {rlc1}
+Rsw2 o1  x   {rlc2}
+
+* ---- U2B: presence (szeles pupu 3-6 kHz kozott), neminvertalo ----
+XU2B x   in3 o3 opamp
+Rpf  o3  in3 {rpres}
+Cpf  o3  in3 1.5n
+Rpg  in3 pg  10k
+Cpg  pg  0   4.7n
+
+* ---- U1B: aktiv Baxandall basszus/magas ----
+Rb1  o3  ba  10k
+Rbp1 ba  bw  {rb1}
+Rbp2 bw  bb  {rb2}
+Cb1  ba  bw  33n
+Cb2  bw  bb  33n
+Rb2  bb  o4  10k
+Rb3  bw  n4  4.7k
+Ct1  o3  ta  4.7n
+Rtp1 ta  tw  {rt1}
+Rtp2 tw  tb  {rt2}
+Ct2  tb  o4  4.7n
+Rt3  tw  n4  3.3k
+Cc   o4  n4  47p
+XU1B 0   n4  o4 opamp
+
+* ---- Kimenet: hangero, soros ellenallas, levezeto, feltetelezett terheles ----
+Cout o4  v1  2.2u
+Rv1  v1  vw  {rv1}
+Rv2  vw  0   {rv2}
+Rser vw  out 1k
+Rblk out 0   100k
+Rld  out 0   47k
+
+.control
+set wr_singlescale
+set wr_vecnames
+ac dec 100 10 30k
+wrdata preamp_out.txt real(v(out)) imag(v(out)) real(v(o4)) imag(v(o4))
+quit
+.endc
+.end
